@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 1m
+  evaluation_interval: 1m
+
+alerting:
+  alertmanagers:
+    - scheme: http
+      static_configs:
+        - targets: [ 'alerts:9093' ]
+        
+rule_files:
+  - /etc/prometheus/rules/*
+
+scrape_configs:
+  # scrape itself
+  - job_name: "prometheus"
+    static_configs:
+    - targets: ["localhost:9090"]
+
+  # scrape docker services
+  - job_name: 'service_discovery'
+    file_sd_configs:
+      - files:
+        - /prometheus-docker-sd/docker-targets.json

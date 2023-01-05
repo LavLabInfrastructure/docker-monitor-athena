@@ -1,0 +1,92 @@
+version: '3.8'
+
+networks:
+  monitoring:
+  frontend:
+    
+volumes:
+  grafana_data:
+  docker_sd_data:
+  prometheus_data:
+  alertmanager_data:
+
+  alert_rules:
+  grafana_provisioning:
+
+  nginx-conf:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+
+services:
+
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
+    restart: unless-stopped
+    
+    volumes:
+      - ${DMA_CONF_DIR:-./configs/monitor-dev-conf}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+      - alert_rules:/etc/prometheus/rules
+      - docker_sd_data:/prometheus-docker-sd:ro
+      
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring
+
+  grafana:
+    build: 
+      context: ${GRAFANA_DOCKERFILE:-../../docker-monitor-grafana}
+      args:
+        - GRAFANA_BASE_IMAGE=${GRAFANA_BASE_IMAGE:-grafana/grafana:latest}
+    restart: unless-stopped
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - grafana_provisioning:/etc/grafana/provisioning
+      
+      - nginx-conf:/etc/nginx/conf.d
+      - ${DMA_CONF_DIR:-./configs/monitor-dev-conf}/nginx/:/nginx/
+
+    networks:
+      - monitoring
+      - frontend
+
+  alertmanager:
+    image: ${ALERTMANAGER_IMAGE:-prom/alertmanager:main}
+    restart: unless-stopped
+    volumes:
+      - "${DMA_CONF_DIR:-./configs/monitor-dev-conf}/alertmanager:/config"
+      - alertmanager_data:/data
+
+    command: --config.file=/config/alertmanager.yml
+    networks:
+      - monitoring
+
+  prometheus-docker-sd:
+    image: ${DOCKER_SD_IMAGE:-stucky/prometheus-docker-sd:latest}
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - docker_sd_data:/prometheus-docker-sd
+
+  nginx:
+    build: ${PROXY_DOCKERFILE:-../../nginxLLAB}
+
+    depends_on:
+      - grafana
+    ports:
+      - "80:80"
+      - "443:443"
+
+    networks:
+      - frontend
+
+    volumes:
+      - "nginx-conf:/etc/nginx/conf.d/volume"
+
+
