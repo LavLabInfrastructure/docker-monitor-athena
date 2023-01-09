@@ -41,7 +41,7 @@ services:
 
   grafana:
     build: 
-      context: ${GRAFANA_DOCKERFILE:-../../docker-monitor-grafana}
+      context: ${GRAFANA_DOCKERFILE:-https://github.com/LavLabInfrastructure/docker-monitor-grafana.git}
       args:
         - GRAFANA_BASE_IMAGE=${GRAFANA_BASE_IMAGE:-grafana/grafana:latest}
     restart: unless-stopped
