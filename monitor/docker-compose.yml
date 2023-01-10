@@ -1,4 +1,4 @@
-version: '3.9'
+version: '3.8'
 
 networks:
   monitoring:
@@ -77,8 +77,6 @@ services:
   nginx:
     build: ${PROXY_DOCKERFILE:-https://github.com/LavLabInfrastructure/nginxLLAB.git}
 
-    depends_on:
-      - grafana
     ports:
       - "80:80"
       - "443:443"
