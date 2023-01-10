@@ -75,7 +75,7 @@ services:
       - docker_sd_data:/prometheus-docker-sd
 
   nginx:
-    build: ${PROXY_DOCKERFILE:-../../nginxLLAB}
+    build: ${PROXY_DOCKERFILE:-https://github.com/LavLabInfrastructure/nginxLLAB.git}
 
     depends_on:
       - grafana
