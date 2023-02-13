@@ -1,0 +1,6 @@
+monitor/certs/*
+monitor/instance/
+
+monitor/configs/*-conf/
+!monitor/configs/monitor-conf/
+!monitor/configs/monitor-dev-conf/

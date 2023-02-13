@@ -3,32 +3,32 @@ version: '3.7'
 networks:
   monitoring:
   frontend:
+  backend:
     
 volumes:
-  grafana_data:
   docker_sd_data:
-  prometheus_data:
-  alertmanager_data:
-
   alert_rules:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
   grafana_provisioning:
-
-  nginx-conf:
     driver_opts:
       type: tmpfs
       device: tmpfs
 
+
 services:
 
   prometheus:
-    image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v2.42.0}
     restart: unless-stopped
     
     volumes:
-      - ${DMA_CONF_DIR:-./configs/monitor-dev-conf}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-      - alert_rules:/etc/prometheus/rules
+      - alert_rules:/etc/prometheus/rules:ro
       - docker_sd_data:/prometheus-docker-sd:ro
+
+      - ${DMA_DATA_DIR:-./instance}/prometheus:/prometheus
+      - ${DMA_CONF_DIR:-./configs/monitor-conf}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -36,6 +36,7 @@ services:
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
+
     networks:
       - monitoring
 
@@ -43,39 +44,74 @@ services:
     build: 
       context: ${GRAFANA_DOCKERFILE:-https://github.com/LavLabInfrastructure/docker-monitor-grafana.git}
       args:
-        - GRAFANA_BASE_IMAGE=${GRAFANA_BASE_IMAGE:-grafana/grafana:latest}
+        - GRAFANA_VERSION=${GRAFANA_VERSION:-9.3.6}
+    env_file: ${DMA_CONF_DIR:-./configs/monitor-conf}/grafana/grafana.env
     restart: unless-stopped
+
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-root}
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=postgres
+      - GF_DATABASE_NAME=${GF_POSTGRES_DB:-grafana}
+      - GF_DATABASE_USER=${POSTGRES_USER:-root}
+      - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - GF_PATHS_LOGS=/logs
+
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ${LOG_DIR:-./instance/logs}/grafana:/logs
       - grafana_provisioning:/etc/grafana/provisioning
-      
-      - nginx-conf:/etc/nginx/conf.d
-      - ${DMA_CONF_DIR:-./configs/monitor-dev-conf}/nginx/:/nginx/
+      - ${DMA_DATA_DIR:-./instance}/grafana:/var/lib/grafana
 
     networks:
       - monitoring
       - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   alertmanager:
-    image: ${ALERTMANAGER_IMAGE:-prom/alertmanager:main}
+    image: prom/alertmanager:${ALERTMANAGER_VERSION:-v0.25.0}
     restart: unless-stopped
     volumes:
-      - "${DMA_CONF_DIR:-./configs/monitor-dev-conf}/alertmanager:/config"
-      - alertmanager_data:/data
+      - ${DMA_DATA_DIR:-./instance}/alertmanager:/data
+      - ${DMA_CONF_DIR:-./configs/monitor-conf}/alertmanager:/config
 
     command: --config.file=/config/alertmanager.yml
     networks:
       - monitoring
 
   prometheus-docker-sd:
-    image: ${DOCKER_SD_IMAGE:-stucky/prometheus-docker-sd:latest}
+    image: stucky/prometheus-docker-sd:latest
     restart: unless-stopped
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - docker_sd_data:/prometheus-docker-sd
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  postgres:
+    image: postgres:${PG_VERSION:-12.2-alpine}
+    healthcheck: 
+      test: ["CMD", "pg_isready"]
+    restart: unless-stopped
+
+    volumes:
+      - ${PG_DATA_DIR:-./instance}/postgres:/postgres
+
+    environment:
+      - PGDATA=/postgres/data/
+      - POSTGRES_INITDB_WALDIR=/postgres/wal/
+      
+      - POSTGRES_DB=${POSTGRES_DB:-root}
+      - POSTGRES_USER=${POSTGRES_USER:-root}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    networks:
+      - backend
 
   nginx:
-    build: ${PROXY_DOCKERFILE:-https://github.com/LavLabInfrastructure/nginxLLAB.git}
+    build:
+      context: ${NGINX_DOCKERFILE:-https://github.com/LavLabInfrastructure/nginxLLAB.git}
+      args:
+        - NGINX_VERSION=${NGINX_VERSION:-1.19-alpine}
 
     ports:
       - "80:80"
@@ -85,6 +121,7 @@ services:
       - frontend
 
     volumes:
-      - "nginx-conf:/etc/nginx/conf.d/volume"
+      - ${CERT_DIR:-./certs}/grafana:/etc/ssl/grafana:ro
+      - ${DMA_CONF_DIR:-./configs/monitor-conf}/nginx/:/etc/nginx/conf.d/grafana
 
 
